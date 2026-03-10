@@ -156,7 +156,96 @@ def analyse_photo(photo_path: str, incident_text: str = "") -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 3. Fallback (no API key or quota exceeded)
+# 3. Transcribe voice to text (Whisper)
+# ---------------------------------------------------------------------------
+def transcribe_audio(audio_path: str) -> str:
+    """Use OpenAI Whisper to transcribe an audio file to text."""
+    try:
+        client = _get_client()
+        with open(audio_path, "rb") as audio_file:
+            resp = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file,
+                language="en",
+                prompt="Mining site safety incident report. Health and safety terminology.",
+            )
+        return resp.text
+    except Exception as e:
+        logger.error("Voice transcription failed: %s", e)
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# 4. Photo pre-analysis → generate description to pre-fill form fields
+# ---------------------------------------------------------------------------
+PHOTO_PREFILL_SYSTEM = """You are an expert mining health & safety visual analyst for Glencore mining operations.
+A mine worker has uploaded a photo of an incident BEFORE filling in the form.
+Analyse the photo and return a JSON object that can pre-fill incident report fields.
+
+Return ONLY valid JSON:
+{
+  "suggested_description": "A natural-language description of what happened based on the photo (2-4 sentences, written as if the worker is describing the incident)",
+  "suggested_categories": ["likely incident categories based on what is visible"],
+  "injury_likely": true/false,
+  "immediate_danger_likely": true/false,
+  "hazards_detected": ["list of visible hazards"],
+  "missing_ppe": ["any missing PPE visible"],
+  "suggested_location_type": "e.g. underground, open pit, workshop, haul road, processing plant, stockpile area",
+  "visible_equipment": ["any equipment visible in the photo"],
+  "confidence": 0.0 to 1.0
+}
+
+Be factual and concise. Write the suggested_description in plain worker language, not technical jargon.
+This is AI-assisted interpretation to help the worker — they can edit it before submitting."""
+
+
+def analyse_photo_for_prefill(photo_path: str) -> dict:
+    """Use GPT-4o vision to analyse a photo and suggest form field values."""
+    try:
+        client = _get_client()
+        image_data = Path(photo_path).read_bytes()
+        b64 = base64.b64encode(image_data).decode()
+
+        ext = Path(photo_path).suffix.lower()
+        mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+                ".gif": "image/gif", ".webp": "image/webp"}.get(ext, "image/jpeg")
+
+        messages = [
+            {"role": "system", "content": PHOTO_PREFILL_SYSTEM},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "A mine worker just uploaded this photo of an incident. Analyse it to help pre-fill their report form."},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "low"}},
+                ],
+            },
+        ]
+
+        resp = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=messages,
+            temperature=0.2,
+            response_format={"type": "json_object"},
+            max_tokens=800,
+        )
+        return json.loads(resp.choices[0].message.content)
+    except Exception as e:
+        logger.error("Photo pre-fill analysis failed: %s", e)
+        return {
+            "suggested_description": "",
+            "suggested_categories": [],
+            "injury_likely": False,
+            "immediate_danger_likely": False,
+            "hazards_detected": [],
+            "missing_ppe": [],
+            "suggested_location_type": "",
+            "visible_equipment": [],
+            "confidence": 0.0,
+        }
+
+
+# ---------------------------------------------------------------------------
+# 5. Fallback (no API key or quota exceeded)
 # ---------------------------------------------------------------------------
 def _fallback_analysis(
     short_desc: str | None,
