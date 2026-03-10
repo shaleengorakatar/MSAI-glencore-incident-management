@@ -201,48 +201,41 @@ This is AI-assisted interpretation to help the worker — they can edit it befor
 
 
 def analyse_photo_for_prefill(photo_path: str) -> dict:
-    """Use GPT-4o vision to analyse a photo and suggest form field values."""
-    try:
-        client = _get_client()
-        image_data = Path(photo_path).read_bytes()
-        b64 = base64.b64encode(image_data).decode()
+    """Use GPT-4o vision to analyse a photo and suggest form field values.
+    
+    Raises on failure so the router can return a meaningful error.
+    """
+    client = _get_client()
+    image_data = Path(photo_path).read_bytes()
+    b64 = base64.b64encode(image_data).decode()
 
-        ext = Path(photo_path).suffix.lower()
-        mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
-                ".gif": "image/gif", ".webp": "image/webp"}.get(ext, "image/jpeg")
+    ext = Path(photo_path).suffix.lower()
+    mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+            ".gif": "image/gif", ".webp": "image/webp"}.get(ext, "image/jpeg")
 
-        messages = [
-            {"role": "system", "content": PHOTO_PREFILL_SYSTEM},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "A mine worker just uploaded this photo of an incident. Analyse it to help pre-fill their report form."},
-                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "low"}},
-                ],
-            },
-        ]
+    logger.info("Analyzing photo for pre-fill: %s (size: %d bytes)", photo_path, len(image_data))
 
-        resp = client.chat.completions.create(
-            model=settings.openai_model,
-            messages=messages,
-            temperature=0.2,
-            response_format={"type": "json_object"},
-            max_tokens=800,
-        )
-        return json.loads(resp.choices[0].message.content)
-    except Exception as e:
-        logger.error("Photo pre-fill analysis failed: %s", e)
-        return {
-            "suggested_description": "",
-            "suggested_categories": [],
-            "injury_likely": False,
-            "immediate_danger_likely": False,
-            "hazards_detected": [],
-            "missing_ppe": [],
-            "suggested_location_type": "",
-            "visible_equipment": [],
-            "confidence": 0.0,
-        }
+    messages = [
+        {"role": "system", "content": PHOTO_PREFILL_SYSTEM},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "A mine worker just uploaded this photo of an incident. Analyse it to help pre-fill their report form."},
+                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "low"}},
+            ],
+        },
+    ]
+
+    resp = client.chat.completions.create(
+        model=settings.openai_model,
+        messages=messages,
+        temperature=0.2,
+        response_format={"type": "json_object"},
+        max_tokens=800,
+    )
+    result = json.loads(resp.choices[0].message.content)
+    logger.info("Photo pre-fill analysis successful: confidence=%.2f", result.get("confidence", 0))
+    return result
 
 
 # ---------------------------------------------------------------------------

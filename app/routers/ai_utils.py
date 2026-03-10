@@ -76,6 +76,11 @@ async def analyze_photo_prefill(photo: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Unsupported image format: {ext}")
 
     content = await photo.read()
+    if not content or len(content) < 500:
+        raise HTTPException(status_code=400, detail=f"Image file is empty or too small ({len(content)} bytes)")
+
+    logger.info("Received photo: filename=%s, size=%d bytes, ext=%s", photo.filename, len(content), ext)
+
     os.makedirs(settings.upload_dir, exist_ok=True)
     tmp_filename = f"prefill_{uuid.uuid4()}{ext}"
     tmp_path = os.path.join(settings.upload_dir, tmp_filename)
@@ -84,7 +89,19 @@ async def analyze_photo_prefill(photo: UploadFile = File(...)):
             f.write(content)
 
         result = analyse_photo_for_prefill(tmp_path)
+        if not result or not result.get("suggested_description"):
+            raise HTTPException(
+                status_code=500,
+                detail="Photo analysis returned empty. Check that OPENAI_API_KEY is set and the image contains visible content.",
+            )
+
+        logger.info("Photo analysis successful: confidence=%.2f, description_len=%d", result.get("confidence", 0), len(result.get("suggested_description", "")))
         return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Photo analysis endpoint error: %s", e)
+        raise HTTPException(status_code=500, detail=f"Photo analysis failed: {str(e)}")
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
