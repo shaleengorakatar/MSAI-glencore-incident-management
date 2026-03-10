@@ -159,20 +159,21 @@ def analyse_photo(photo_path: str, incident_text: str = "") -> dict:
 # 3. Transcribe voice to text (Whisper)
 # ---------------------------------------------------------------------------
 def transcribe_audio(audio_path: str) -> str:
-    """Use OpenAI Whisper to transcribe an audio file to text."""
-    try:
-        client = _get_client()
-        with open(audio_path, "rb") as audio_file:
-            resp = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                language="en",
-                prompt="Mining site safety incident report. Health and safety terminology.",
-            )
-        return resp.text
-    except Exception as e:
-        logger.error("Voice transcription failed: %s", e)
-        return ""
+    """Use OpenAI Whisper to transcribe an audio file to text.
+    
+    Raises on failure so the router can return a meaningful error.
+    """
+    client = _get_client()
+    logger.info("Transcribing audio file: %s (size: %d bytes)", audio_path, Path(audio_path).stat().st_size)
+    with open(audio_path, "rb") as audio_file:
+        resp = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_file,
+            language="en",
+            prompt="Mining site safety incident report. Health and safety terminology.",
+        )
+    logger.info("Whisper response: %s", resp.text[:200] if resp.text else "(empty)")
+    return resp.text
 
 
 # ---------------------------------------------------------------------------

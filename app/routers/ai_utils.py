@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import logging
 import os
-import tempfile
 import uuid
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from app.config import settings
 from app.services.ai_service import analyse_photo_for_prefill, transcribe_audio
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ai", tags=["AI Utilities"])
 
@@ -26,18 +28,33 @@ async def voice_to_text(audio: UploadFile = File(...)):
     if ext not in allowed:
         raise HTTPException(status_code=400, detail=f"Unsupported audio format: {ext}")
 
-    # Save to a temp file
     content = await audio.read()
-    tmp_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}{ext}")
+    if not content or len(content) < 100:
+        raise HTTPException(status_code=400, detail=f"Audio file is empty or too small ({len(content)} bytes)")
+
+    logger.info("Received audio: filename=%s, size=%d bytes, ext=%s", audio.filename, len(content), ext)
+
+    # Save to uploads dir (Render's temp dir can be read-only)
+    os.makedirs(settings.upload_dir, exist_ok=True)
+    tmp_path = os.path.join(settings.upload_dir, f"voice_{uuid.uuid4()}{ext}")
     try:
         with open(tmp_path, "wb") as f:
             f.write(content)
 
         transcript = transcribe_audio(tmp_path)
         if not transcript:
-            raise HTTPException(status_code=500, detail="Transcription failed")
+            raise HTTPException(
+                status_code=500,
+                detail="Transcription returned empty. Check that OPENAI_API_KEY is set and the audio contains speech.",
+            )
 
+        logger.info("Transcription successful: %d chars", len(transcript))
         return {"transcript": transcript}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Transcription endpoint error: %s", e)
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
