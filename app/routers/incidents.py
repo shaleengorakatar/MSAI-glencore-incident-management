@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.database import (
@@ -47,33 +49,43 @@ async def create_incident(
     incident_id = str(uuid.uuid4())
     now = reported_at or datetime.now(timezone.utc).isoformat()
 
-    # Handle photo upload
+    # 1. Save Photo first (if exists) - using async file write
     photo_filename = None
     if photo and photo.filename:
         ext = os.path.splitext(photo.filename)[1] or ".jpg"
         photo_filename = f"{incident_id}{ext}"
         photo_path = settings.upload_dir / photo_filename
         content = await photo.read()
-        with open(photo_path, "wb") as f:
-            f.write(content)
+        await run_in_threadpool(lambda: photo_path.write_bytes(content))
 
-    # AI text analysis
-    ai_data = analyse_incident_text(
-        short_description=short_description,
-        detailed_description=detailed_description,
-        people_impacted=people_impacted,
-        injury_reported=injury_reported,
-        immediate_danger=immediate_danger,
-        location=location,
-        site_name=site_name,
+    # 2. Parallelize AI Tasks - run text and photo analysis simultaneously
+    text_task = run_in_threadpool(
+        analyse_incident_text,
+        short_description,
+        detailed_description,
+        people_impacted,
+        injury_reported,
+        immediate_danger,
+        location,
+        site_name,
     )
-
-    # AI photo analysis
-    photo_analysis_text = None
+    
+    photo_task = None
     if photo_filename:
-        photo_path = settings.upload_dir / photo_filename
         incident_text = f"{short_description or ''} {detailed_description or ''}"
-        photo_result = analyse_photo(photo_path, incident_text)
+        photo_task = run_in_threadpool(
+            analyse_photo,
+            settings.upload_dir / photo_filename,
+            incident_text,
+        )
+
+    # Wait for all AI results in parallel
+    ai_data = await text_task
+    photo_result = await photo_task if photo_task else {}
+
+    # 3. Format Photo Analysis String
+    photo_analysis_text = None
+    if photo_result:
         photo_analysis_text = (
             f"Description: {photo_result.get('description', '')}\n"
             f"Hazards: {', '.join(photo_result.get('hazards_detected', []))}\n"
@@ -81,7 +93,7 @@ async def create_incident(
             f"Mismatch flags: {', '.join(photo_result.get('mismatch_flags', []))}"
         )
 
-    # Build record
+    # 4. Save to DB - run in thread pool to avoid blocking
     record = {
         "id": incident_id,
         "reporter_name": reporter_name,
@@ -100,8 +112,17 @@ async def create_incident(
     if photo_analysis_text:
         record["ai_photo_analysis"] = photo_analysis_text
 
-    result = insert_incident(record)
-    return result
+    try:
+        result = await run_in_threadpool(insert_incident, record)
+        return result
+    except Exception as e:
+        # Cleanup orphaned photo if database insert fails
+        if photo_filename:
+            try:
+                (settings.upload_dir / photo_filename).unlink(missing_ok=True)
+            except Exception:
+                pass  # Best effort cleanup
+        raise HTTPException(status_code=500, detail=f"Failed to save incident: {str(e)}")
 
 
 # ---------------------------------------------------------------------------
@@ -113,14 +134,16 @@ async def create_incident_json(body: IncidentSubmission):
     incident_id = str(uuid.uuid4())
     now = body.reported_at or datetime.now(timezone.utc).isoformat()
 
-    ai_data = analyse_incident_text(
-        short_description=body.short_description,
-        detailed_description=body.detailed_description,
-        people_impacted=body.people_impacted,
-        injury_reported=body.injury_reported,
-        immediate_danger=body.immediate_danger,
-        location=body.location,
-        site_name=body.site_name,
+    # Run AI analysis in thread pool
+    ai_data = await run_in_threadpool(
+        analyse_incident_text,
+        body.short_description,
+        body.detailed_description,
+        body.people_impacted,
+        body.injury_reported,
+        body.immediate_danger,
+        body.location,
+        body.site_name,
     )
 
     record = {
@@ -138,7 +161,7 @@ async def create_incident_json(body: IncidentSubmission):
         "status": "open",
         **ai_data,
     }
-    result = insert_incident(record)
+    result = await run_in_threadpool(insert_incident, record)
     return result
 
 
@@ -154,7 +177,9 @@ async def get_incidents(
     limit: int = 50,
     offset: int = 0,
 ):
-    incidents = list_incidents(
+    # Run database queries in parallel
+    incidents_task = run_in_threadpool(
+        list_incidents,
         status=status,
         severity=severity,
         priority=priority,
@@ -162,7 +187,15 @@ async def get_incidents(
         limit=limit,
         offset=offset,
     )
-    total = count_incidents(status=status, severity=severity, priority=priority, site=site)
+    total_task = run_in_threadpool(
+        count_incidents,
+        status=status,
+        severity=severity,
+        priority=priority,
+        site=site,
+    )
+    
+    incidents, total = await asyncio.gather(incidents_task, total_task)
     return IncidentListResponse(incidents=incidents, total=total, limit=limit, offset=offset)
 
 
@@ -171,7 +204,7 @@ async def get_incidents(
 # ---------------------------------------------------------------------------
 @router.get("/{incident_id}", response_model=IncidentResponse)
 async def get_incident_detail(incident_id: str):
-    incident = get_incident(incident_id)
+    incident = await run_in_threadpool(get_incident, incident_id)
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
     return incident
@@ -182,7 +215,7 @@ async def get_incident_detail(incident_id: str):
 # ---------------------------------------------------------------------------
 @router.patch("/{incident_id}", response_model=IncidentResponse)
 async def patch_incident(incident_id: str, update: IncidentUpdate):
-    existing = get_incident(incident_id)
+    existing = await run_in_threadpool(get_incident, incident_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Incident not found")
 
@@ -190,7 +223,7 @@ async def patch_incident(incident_id: str, update: IncidentUpdate):
     if not data:
         raise HTTPException(status_code=400, detail="No fields to update")
 
-    result = update_incident(incident_id, data)
+    result = await run_in_threadpool(update_incident, incident_id, data)
     return result
 
 
@@ -199,12 +232,14 @@ async def patch_incident(incident_id: str, update: IncidentUpdate):
 # ---------------------------------------------------------------------------
 @router.get("/{incident_id}/similar", response_model=SimilarIncidentsResponse)
 async def get_similar_incidents(incident_id: str):
-    incident = get_incident(incident_id)
+    incident = await run_in_threadpool(get_incident, incident_id)
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
 
     search_text = f"{incident.get('ai_title', '')} {incident.get('short_description', '')} {incident.get('detailed_description', '')}"
-    similar_raw = search_similar_text(search_text, exclude_id=incident_id, limit=5)
+    similar_raw = await run_in_threadpool(
+        search_similar_text, search_text, exclude_id=incident_id, limit=5
+    )
 
     similar = [
         SimilarIncident(
