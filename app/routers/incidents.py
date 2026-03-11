@@ -26,8 +26,21 @@ from app.models.schemas import (
     SimilarIncidentsResponse,
 )
 from app.services.ai_service import analyse_incident_text, analyse_photo
+from app.data.sites import GLENCORE_SITES, SITES_BY_REGION
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
+
+
+# ---------------------------------------------------------------------------
+# GET /api/incidents/sites  –  Get all available sites
+# ---------------------------------------------------------------------------
+@router.get("/sites")
+async def get_sites():
+    """Return list of all Glencore sites for frontend dropdown."""
+    return {
+        "sites": GLENCORE_SITES,
+        "sites_by_region": SITES_BY_REGION,
+    }
 
 
 # ---------------------------------------------------------------------------
