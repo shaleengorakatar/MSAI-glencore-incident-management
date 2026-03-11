@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     # LLM
-    openai_api_key: str = ""
+    openai_api_key: Optional[str] = None
     openai_model: str = "gpt-4o"
 
     # CORS
