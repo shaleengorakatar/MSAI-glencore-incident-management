@@ -11,6 +11,74 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Combined AI Analysis (Voice + Photo)
+# ---------------------------------------------------------------------------
+def analyse_incident_combined(
+    short_description: str | None,
+    detailed_description: str | None,
+    voice_transcription: str | None,
+    photo_analysis: dict | None,
+    people_impacted: int,
+    injury_reported: bool,
+    immediate_danger: bool,
+    location: str | None,
+    site_name: str | None,
+) -> dict:
+    """Combined analysis using voice transcription and/or photo analysis."""
+    
+    # Build comprehensive incident context
+    context_parts = []
+    
+    # Add basic info
+    context_parts.append(f"Site: {site_name or 'Unknown'}")
+    context_parts.append(f"Location: {location or 'Not specified'}")
+    context_parts.append(f"People impacted: {people_impacted}")
+    context_parts.append(f"Injury reported: {injury_reported}")
+    context_parts.append(f"Immediate danger: {immediate_danger}")
+    
+    # Add text descriptions
+    if short_description:
+        context_parts.append(f"Short description: {short_description}")
+    if detailed_description:
+        context_parts.append(f"Detailed description: {detailed_description}")
+    
+    # Add voice transcription
+    if voice_transcription:
+        context_parts.append(f"Voice transcription: {voice_transcription}")
+    
+    # Add photo analysis
+    if photo_analysis:
+        context_parts.append(f"Photo description: {photo_analysis.get('description', 'No description')}")
+        if photo_analysis.get('hazards_detected'):
+            context_parts.append(f"Detected hazards: {', '.join(photo_analysis['hazards_detected'])}")
+        if photo_analysis.get('missing_ppe'):
+            context_parts.append(f"Missing PPE: {', '.join(photo_analysis['missing_ppe'])}")
+        if photo_analysis.get('mismatch_flags'):
+            context_parts.append(f"Warning flags: {', '.join(photo_analysis['mismatch_flags'])}")
+    
+    # Build user message
+    user_msg = f"Incident Report:\n" + "\n".join(f"- {part}" for part in context_parts)
+    
+    try:
+        client = _get_client()
+        resp = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[
+                {"role": "system", "content": EXTRACTION_SYSTEM},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.3,
+            max_tokens=800,
+        )
+        content = resp.choices[0].message.content
+        logger.info("Combined AI analysis completed successfully")
+        return json.loads(content)
+    except Exception as e:
+        logger.error(f"Combined AI analysis failed: {e}")
+        raise
+
 _client: OpenAI | None = None
 
 

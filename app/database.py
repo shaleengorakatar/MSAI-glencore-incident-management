@@ -26,6 +26,7 @@ def init_db():
                 reported_at TEXT NOT NULL,
                 short_description TEXT,
                 detailed_description TEXT,
+                voice_transcription TEXT,
                 people_impacted INTEGER DEFAULT 0,
                 injury_reported INTEGER DEFAULT 0,
                 immediate_danger INTEGER DEFAULT 0,

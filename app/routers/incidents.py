@@ -25,7 +25,7 @@ from app.models.schemas import (
     SimilarIncident,
     SimilarIncidentsResponse,
 )
-from app.services.ai_service import analyse_incident_text, analyse_photo
+from app.services.ai_service import analyse_incident_text, analyse_photo, analyse_incident_combined
 from app.data.sites import GLENCORE_SITES, SITES_BY_REGION
 from app.routers.auth import get_current_user, User, UserRole
 
@@ -55,6 +55,7 @@ async def create_incident(
     reported_at: str = Form(None),
     short_description: str = Form(None),
     detailed_description: str = Form(None),
+    voice_transcription: str = Form(None),
     people_impacted: int = Form(0),
     injury_reported: bool = Form(False),
     immediate_danger: bool = Form(False),
@@ -72,32 +73,51 @@ async def create_incident(
         content = await photo.read()
         await run_in_threadpool(lambda: photo_path.write_bytes(content))
 
-    # 2. Parallelize AI Tasks - run text and photo analysis simultaneously
-    text_task = run_in_threadpool(
-        analyse_incident_text,
-        short_description,
-        detailed_description,
-        people_impacted,
-        injury_reported,
-        immediate_danger,
-        location,
-        site_name,
-    )
-    
-    photo_task = None
+    # 2. Get photo analysis if photo exists
+    photo_result = None
     if photo_filename:
-        incident_text = f"{short_description or ''} {detailed_description or ''}"
+        incident_text = f"{short_description or ''} {detailed_description or ''} {voice_transcription or ''}"
         photo_task = run_in_threadpool(
             analyse_photo,
             settings.upload_dir / photo_filename,
             incident_text,
         )
+        photo_result = await photo_task
 
-    # Wait for all AI results in parallel
-    ai_data = await text_task
-    photo_result = await photo_task if photo_task else {}
+    # 3. Use combined AI analysis (intelligently uses available data)
+    # If voice transcription exists, use it for analysis
+    # If photo analysis exists, use it for analysis  
+    # If both exist, combine them
+    # If neither exists, use basic text analysis
+    if voice_transcription or photo_result:
+        combined_task = run_in_threadpool(
+            analyse_incident_combined,
+            short_description,
+            detailed_description,
+            voice_transcription,
+            photo_result,
+            people_impacted,
+            injury_reported,
+            immediate_danger,
+            location,
+            site_name,
+        )
+        ai_data = await combined_task
+    else:
+        # Fallback to basic text analysis
+        text_task = run_in_threadpool(
+            analyse_incident_text,
+            short_description,
+            detailed_description,
+            people_impacted,
+            injury_reported,
+            immediate_danger,
+            location,
+            site_name,
+        )
+        ai_data = await text_task
 
-    # 3. Format Photo Analysis String
+    # 4. Format Photo Analysis String for storage
     photo_analysis_text = None
     if photo_result:
         photo_analysis_text = (
@@ -107,7 +127,7 @@ async def create_incident(
             f"Mismatch flags: {', '.join(photo_result.get('mismatch_flags', []))}"
         )
 
-    # 4. Save to DB - run in thread pool to avoid blocking
+    # 5. Save to DB - run in thread pool to avoid blocking
     record = {
         "id": incident_id,
         "reporter_name": reporter_name,
@@ -116,6 +136,7 @@ async def create_incident(
         "reported_at": now,
         "short_description": short_description,
         "detailed_description": detailed_description,
+        "voice_transcription": voice_transcription,
         "people_impacted": people_impacted,
         "injury_reported": int(injury_reported),
         "immediate_danger": int(immediate_danger),
