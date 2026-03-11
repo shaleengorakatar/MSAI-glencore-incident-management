@@ -19,7 +19,15 @@ def _get_client() -> OpenAI:
     if _client is None:
         if not settings.openai_api_key:
             raise ValueError("OPENAI_API_KEY is not set in environment variables")
-        _client = OpenAI(api_key=settings.openai_api_key)
+        
+        # Log key details for debugging (masked)
+        key = settings.openai_api_key
+        logger.info("Creating OpenAI client with key: %s...%s (length: %d)", 
+                   key[:10] if len(key) > 10 else key, 
+                   key[-4:] if len(key) > 4 else key, 
+                   len(key))
+        
+        _client = OpenAI(api_key=key)
     return _client
 
 
