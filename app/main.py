@@ -23,7 +23,7 @@ app = FastAPI(
         "and categorizes them. Triage managers get a prioritized queue "
         "with thematic views and drill-down."
     ),
-    version="1.0.0",
+    version="1.0.1",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",

@@ -14,6 +14,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai", tags=["AI Utilities"])
 
 
+@router.get("/debug")
+async def debug_api_key():
+    """Debug endpoint to check if OpenAI API key is loaded."""
+    key = settings.openai_api_key
+    masked = key[:10] + "..." + key[-4:] if key and len(key) > 14 else "NOT_SET"
+    return {
+        "api_key_set": bool(key),
+        "api_key_length": len(key) if key else 0,
+        "api_key_preview": masked,
+        "openai_model": settings.openai_model,
+    }
+
+
 # ---------------------------------------------------------------------------
 # POST /api/ai/transcribe  –  Voice-to-text (Whisper)
 # ---------------------------------------------------------------------------
