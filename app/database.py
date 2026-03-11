@@ -116,6 +116,7 @@ def list_incidents(
     site: str | None = None,
     limit: int = 100,
     offset: int = 0,
+    reporter_name: str | None = None,
 ) -> list[dict]:
     query = "SELECT * FROM incidents WHERE 1=1"
     params: dict = {}
@@ -131,6 +132,9 @@ def list_incidents(
     if site:
         query += " AND site_name = :site"
         params["site"] = site
+    if reporter_name:
+        query += " AND reporter_name = :reporter_name"
+        params["reporter_name"] = reporter_name
 
     query += " ORDER BY CASE ai_priority WHEN 'P1' THEN 1 WHEN 'P2' THEN 2 WHEN 'P3' THEN 3 WHEN 'P4' THEN 4 ELSE 5 END, reported_at DESC"
     query += " LIMIT :limit OFFSET :offset"
@@ -147,6 +151,7 @@ def count_incidents(
     severity: str | None = None,
     priority: str | None = None,
     site: str | None = None,
+    reporter_name: str | None = None,
 ) -> int:
     query = "SELECT COUNT(*) FROM incidents WHERE 1=1"
     params: dict = {}
@@ -162,6 +167,10 @@ def count_incidents(
     if site:
         query += " AND site_name = :site"
         params["site"] = site
+    if reporter_name:
+        query += " AND reporter_name = :reporter_name"
+        params["reporter_name"] = reporter_name
+
     with _connect() as conn:
         return conn.execute(query, params).fetchone()[0]
 

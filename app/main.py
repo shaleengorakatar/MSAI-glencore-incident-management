@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import init_db
-from app.routers import ai_utils, dashboard, incidents, themes
+from app.routers import ai_utils, auth, dashboard, incidents, themes
 from app.services.seed_data import seed_demo_data
 
 app = FastAPI(
@@ -52,6 +52,7 @@ app.mount("/uploads", StaticFiles(directory=str(settings.upload_dir)), name="upl
 # ---------------------------------------------------------------------------
 # Routers
 # ---------------------------------------------------------------------------
+app.include_router(auth.router, prefix="/api")
 app.include_router(incidents.router, prefix="/api")
 app.include_router(themes.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")

@@ -27,6 +27,7 @@ from app.models.schemas import (
 )
 from app.services.ai_service import analyse_incident_text, analyse_photo
 from app.data.sites import GLENCORE_SITES, SITES_BY_REGION
+from app.routers.auth import get_current_user, User, UserRole
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
@@ -189,7 +190,14 @@ async def get_incidents(
     site: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    current_user: User = get_current_user,
 ):
+    # Role-based filtering
+    reporter_filter = None
+    if current_user.role == UserRole.WORKER:
+        # Workers can only see their own incidents
+        reporter_filter = current_user.name
+    
     # Run database queries in parallel
     incidents_task = run_in_threadpool(
         list_incidents,
@@ -199,6 +207,7 @@ async def get_incidents(
         site=site,
         limit=limit,
         offset=offset,
+        reporter_name=reporter_filter,
     )
     total_task = run_in_threadpool(
         count_incidents,
@@ -206,6 +215,7 @@ async def get_incidents(
         severity=severity,
         priority=priority,
         site=site,
+        reporter_name=reporter_filter,
     )
     
     incidents, total = await asyncio.gather(incidents_task, total_task)
@@ -216,10 +226,15 @@ async def get_incidents(
 # GET /api/incidents/{id}  –  Single incident detail
 # ---------------------------------------------------------------------------
 @router.get("/{incident_id}", response_model=IncidentResponse)
-async def get_incident_detail(incident_id: str):
+async def get_incident_detail(incident_id: str, current_user: User = get_current_user):
     incident = await run_in_threadpool(get_incident, incident_id)
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
+    
+    # Workers can only view their own incidents
+    if current_user.role == UserRole.WORKER and incident.get("reporter_name") != current_user.name:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
     return incident
 
 
