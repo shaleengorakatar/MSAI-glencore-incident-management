@@ -33,7 +33,7 @@ router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
 
 # ---------------------------------------------------------------------------
-# GET /api/incidents/sites  –  Get all available sites
+# GET /api/incidents/sites  –  Get all available sites (MUST be first route!)
 # ---------------------------------------------------------------------------
 @router.get("/sites")
 async def get_sites():
