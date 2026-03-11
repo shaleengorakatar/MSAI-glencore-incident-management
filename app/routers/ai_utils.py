@@ -48,8 +48,7 @@ async def voice_to_text(audio: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Unsupported audio format: {ext}")
 
     # Stream directly to disk (memory efficient)
-    os.makedirs(settings.upload_dir, exist_ok=True)
-    tmp_path = os.path.join(settings.upload_dir, f"voice_{uuid.uuid4()}{ext}")
+    tmp_path = settings.upload_dir / f"voice_{uuid.uuid4()}{ext}"
     try:
         with open(tmp_path, "wb") as buffer:
             shutil.copyfileobj(audio.file, buffer)
@@ -108,9 +107,8 @@ async def analyze_photo_prefill(photo: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Unsupported image format: {ext}")
 
     # Stream directly to disk (memory efficient)
-    os.makedirs(settings.upload_dir, exist_ok=True)
     tmp_filename = f"prefill_{uuid.uuid4()}{ext}"
-    tmp_path = os.path.join(settings.upload_dir, tmp_filename)
+    tmp_path = settings.upload_dir / tmp_filename
     try:
         with open(tmp_path, "wb") as buffer:
             shutil.copyfileobj(photo.file, buffer)

@@ -50,10 +50,9 @@ async def create_incident(
     # Handle photo upload
     photo_filename = None
     if photo and photo.filename:
-        os.makedirs(settings.upload_dir, exist_ok=True)
         ext = os.path.splitext(photo.filename)[1] or ".jpg"
         photo_filename = f"{incident_id}{ext}"
-        photo_path = os.path.join(settings.upload_dir, photo_filename)
+        photo_path = settings.upload_dir / photo_filename
         content = await photo.read()
         with open(photo_path, "wb") as f:
             f.write(content)
@@ -72,7 +71,7 @@ async def create_incident(
     # AI photo analysis
     photo_analysis_text = None
     if photo_filename:
-        photo_path = os.path.join(settings.upload_dir, photo_filename)
+        photo_path = settings.upload_dir / photo_filename
         incident_text = f"{short_description or ''} {detailed_description or ''}"
         photo_result = analyse_photo(photo_path, incident_text)
         photo_analysis_text = (

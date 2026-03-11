@@ -15,3 +15,5 @@ services:
         value: sqlite:///./incidents.db
       - key: UPLOAD_DIR
         value: uploads
+      - key: ENVIRONMENT
+        value: production

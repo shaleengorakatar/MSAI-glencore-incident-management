@@ -46,8 +46,8 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Serve uploaded photos
 # ---------------------------------------------------------------------------
-os.makedirs(settings.upload_dir, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
+# upload_dir is already created in config.py, but ensure it's a string for StaticFiles
+app.mount("/uploads", StaticFiles(directory=str(settings.upload_dir)), name="uploads")
 
 # ---------------------------------------------------------------------------
 # Routers
