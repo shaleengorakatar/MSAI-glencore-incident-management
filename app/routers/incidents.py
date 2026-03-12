@@ -218,6 +218,9 @@ async def get_incidents(
     if current_user.role == UserRole.WORKER:
         # Workers can only see their own incidents
         reporter_filter = current_user.name
+        print(f"DEBUG: Worker {current_user.name} filtering incidents by reporter_name='{reporter_filter}'")
+    else:
+        print(f"DEBUG: Manager {current_user.name} seeing ALL incidents (no filter)")
     
     # Run database queries in parallel
     incidents_task = run_in_threadpool(
@@ -254,7 +257,10 @@ async def get_incident_detail(incident_id: str, current_user: User = get_current
     
     # Workers can only view their own incidents
     if current_user.role == UserRole.WORKER and incident.get("reporter_name") != current_user.name:
+        print(f"DEBUG: Worker {current_user.name} DENIED access to incident by {incident.get('reporter_name')}")
         raise HTTPException(status_code=403, detail="Access denied")
+    
+    print(f"DEBUG: {current_user.role} {current_user.name} GRANTED access to incident by {incident.get('reporter_name')}")
     
     return incident
 
