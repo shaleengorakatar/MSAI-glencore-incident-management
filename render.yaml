@@ -12,8 +12,15 @@ services:
       - key: CORS_ORIGINS
         value: http://localhost:3000,http://localhost:5173,https://*.lovable.app
       - key: DATABASE_URL
-        value: sqlite:///./incidents.db
+        fromDatabase:
+          name: glencore-incidents-db
+          property: connectionString
       - key: UPLOAD_DIR
         value: uploads
       - key: ENVIRONMENT
         value: production
+
+databases:
+  - name: glencore-incidents-db
+    plan: free
+    databaseName: glencore_incidents
