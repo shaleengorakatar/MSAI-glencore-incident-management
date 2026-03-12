@@ -94,6 +94,8 @@ class IncidentListResponse(BaseModel):
 class IncidentUpdate(BaseModel):
     status: Optional[str] = None  # open / in_review / assigned / escalated / closed
     assigned_to: Optional[str] = None
+    ai_priority: Optional[str] = None  # P1 | P2 | P3 | P4
+    ai_severity: Optional[str] = None  # Critical | High | Medium | Low
 
 
 # ---------------------------------------------------------------------------

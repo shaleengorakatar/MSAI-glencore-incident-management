@@ -269,14 +269,20 @@ async def get_incident_detail(incident_id: str, current_user: User = get_current
 # PATCH /api/incidents/{id}  –  Update status / assignment
 # ---------------------------------------------------------------------------
 @router.patch("/{incident_id}", response_model=IncidentResponse)
-async def patch_incident(incident_id: str, update: IncidentUpdate):
+async def patch_incident(incident_id: str, update: IncidentUpdate, current_user: User = get_current_user):
     existing = await run_in_threadpool(get_incident, incident_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Incident not found")
+    
+    # Only managers can update incidents
+    if current_user.role != UserRole.MANAGER:
+        raise HTTPException(status_code=403, detail="Only managers can update incidents")
 
     data = update.model_dump(exclude_none=True)
     if not data:
         raise HTTPException(status_code=400, detail="No fields to update")
+    
+    print(f"DEBUG: Manager {current_user.name} updating incident {incident_id} with: {list(data.keys())}")
 
     result = await run_in_threadpool(update_incident, incident_id, data)
     return result
