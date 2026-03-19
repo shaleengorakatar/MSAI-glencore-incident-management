@@ -37,33 +37,33 @@ class UserResponse(BaseModel):
 
 # Mock user database (in production, use real database)
 MOCK_USERS = {
-    "worker@glencore.com": {
+    "worker@client.com": {
         "id": "user-1",
-        "email": "worker@glencore.com",
+        "email": "worker@client.com",
         "name": "John Worker",
         "role": UserRole.WORKER,
         "site": "Elkview Operations - Sparwood, BC",
         "password": "worker123"  # In production, hash this!
     },
-    "manager@glencore.com": {
+    "manager@client.com": {
         "id": "user-2", 
-        "email": "manager@glencore.com",
+        "email": "manager@client.com",
         "name": "Sarah Manager",
         "role": UserRole.MANAGER,
         "site": None,
         "password": "manager123"  # In production, hash this!
     },
-    "sudbury.worker@glencore.com": {
+    "sudbury.worker@client.com": {
         "id": "user-3",
-        "email": "sudbury.worker@glencore.com", 
+        "email": "sudbury.worker@client.com", 
         "name": "Mike Worker",
         "role": UserRole.WORKER,
         "site": "Sudbury Integrated Nickel Operations - Sudbury, Ontario",
         "password": "worker123"
     },
-    "chile.manager@glencore.com": {
+    "chile.manager@client.com": {
         "id": "user-4",
-        "email": "chile.manager@glencore.com",
+        "email": "chile.manager@client.com",
         "name": "Carlos Manager", 
         "role": UserRole.MANAGER,
         "site": None,
