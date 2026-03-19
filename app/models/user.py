@@ -68,5 +68,21 @@ MOCK_USERS = {
         "role": UserRole.MANAGER,
         "site": None,
         "password": "manager123"
+    },
+    "australia.worker@client.com": {
+        "id": "user-5",
+        "email": "australia.worker@client.com",
+        "name": "Emma Worker",
+        "role": UserRole.WORKER,
+        "site": "Collinsville Coal Operations - Queensland, Australia",
+        "password": "worker123"
+    },
+    "usa.manager@client.com": {
+        "id": "user-6",
+        "email": "usa.manager@client.com",
+        "name": "David Manager",
+        "role": UserRole.MANAGER,
+        "site": None,
+        "password": "manager123"
     }
 }
